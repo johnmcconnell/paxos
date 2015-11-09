@@ -13,17 +13,23 @@ const (
 
 // Uint64ToAddr ...
 func Uint64ToAddr(V uint64) (*net.UDPAddr, error) {
-	A, B := Uint64ToUint32s(V)
-
-	B1, B2, B3, B4 := Uint32ToBytes(A)
-
-	IP := BytesToIPS(B1, B2, B3, B4)
-	Port := Uint32ToS(B)
+	IP, Port := Uint64ToHostPort(V)
 
 	return net.ResolveUDPAddr(
 		"udp",
 		IP+":"+Port,
 	)
+}
+
+// Uint64ToHostPort ...
+func Uint64ToHostPort(V uint64) (string, string) {
+	A, B := Uint64ToUint32s(V)
+	B1, B2, B3, B4 := Uint32ToBytes(A)
+
+	IP := BytesToIPS(B1, B2, B3, B4)
+	Port := Uint32ToS(B)
+
+	return IP, Port
 }
 
 // Uint32ToS ...
