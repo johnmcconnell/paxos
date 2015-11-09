@@ -7,13 +7,13 @@ import (
 
 // Decider ...
 type Decider struct {
-	IDs          []uint32
+	IDs          []uint64
 	round        uint32
-	Votes        map[uint32]bool
+	Votes        map[uint64]bool
 	VoteCount    int
-	Acknowledged map[uint32]bool
+	Acknowledged map[uint64]bool
 	AckCount     int
-	VotedID      uint32
+	VotedID      uint64
 	Voted        bool
 	Finished     bool
 }
@@ -21,34 +21,35 @@ type Decider struct {
 // NewDecider ...
 func NewDecider() *Decider {
 	D := &Decider{}
-	D.reset()
+	D.Reset()
 
 	return D
 }
 
 // SetIDs ...
-func (D *Decider) SetIDs(IDs []uint32) {
+func (D *Decider) SetIDs(IDs []uint64) {
 	D.IDs = IDs
-	D.reset()
+	D.Reset()
 }
 
 // NextRound ...
-func (D Decider) NextRound() uint32 {
-	return D.round + 1
+func (D *Decider) NextRound() {
+	D.round++
 }
 
-func (D *Decider) reset() {
-	D.Votes = make(map[uint32]bool)
+// Reset ...
+func (D *Decider) Reset() {
+	D.Votes = make(map[uint64]bool)
 	D.VoteCount = 0
 
-	D.Acknowledged = make(map[uint32]bool)
+	D.Acknowledged = make(map[uint64]bool)
 	D.AckCount = 0
 
 	D.Finished = false
 }
 
 // Check ...
-func (D Decider) Check(ID uint32, M Message) uint32 {
+func (D Decider) Check(ID uint64, M Message) uint32 {
 	if D.VotedID == ID && D.round == M.Round {
 		return OK
 	}
@@ -57,7 +58,7 @@ func (D Decider) Check(ID uint32, M Message) uint32 {
 }
 
 // VoteResponse ...
-func (D *Decider) VoteResponse(ID uint32, M Message) uint32 {
+func (D *Decider) VoteResponse(ID uint64, M Message) uint32 {
 	if D.round > M.Round {
 		return No
 	}
@@ -77,9 +78,9 @@ func (D *Decider) VoteResponse(ID uint32, M Message) uint32 {
 }
 
 // IsElected ...
-func (D *Decider) IsElected(ID uint32, M Message) bool {
+func (D *Decider) IsElected(ID uint64, M Message) bool {
 	if D.round < M.Round {
-		D.reset()
+		D.Reset()
 
 		return false
 	}
@@ -95,16 +96,16 @@ func (D *Decider) IsElected(ID uint32, M Message) bool {
 	return D.VoteCount > Half
 }
 
-// ConsensusResult this needs to
+// ElectionResult this needs to
 // be threadsafe
-func (D Decider) ConsensusResult() (uint32, bool) {
+func (D Decider) ElectionResult() (uint64, bool) {
 	return D.VotedID, D.Finished
 }
 
 // Acknowledge ...
-func (D *Decider) Acknowledge(ID uint32, M Message) bool {
+func (D *Decider) Acknowledge(ID uint64, M Message) bool {
 	if D.round < M.Round {
-		D.reset()
+		D.Reset()
 
 		return false
 	}
@@ -121,7 +122,7 @@ func (D *Decider) Acknowledge(ID uint32, M Message) bool {
 }
 
 // Confirmed ...
-func (D *Decider) Confirmed(ID uint32) {
+func (D *Decider) Confirmed(ID uint64) {
 	D.Finished = true
 	D.VotedID = ID
 }

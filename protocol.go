@@ -7,22 +7,42 @@ const (
 	CheckReq
 	CheckRes
 	Confirmation
+	LeaderReq
+	LeaderRes
+	JoinReq
+	JoinRes
 )
+
+// Pretty Mappings ...
+var (
+	MessageStringMap = map[byte]string{
+		VoteReq:      "VoteReq",
+		VoteRes:      "VoteRes",
+		CheckReq:     "CheckReq",
+		CheckRes:     "CheckRes",
+		Confirmation: "Confirmation",
+		LeaderReq:    "LeaderReq",
+		LeaderRes:    "LeaderRes",
+		JoinReq:      "JoinReq",
+		JoinRes:      "JoinRes",
+	}
+	MessageByteMap map[string]byte
+)
+
+func init() {
+	MessageByteMap = make(map[string]byte)
+
+	for k, v := range MessageStringMap {
+		MessageByteMap[v] = k
+	}
+}
 
 // Pretty ...
 func Pretty(B byte) string {
-	switch B {
-	case VoteReq:
-		return "VoteReq"
-	case VoteRes:
-		return "VoteRes"
-	case CheckReq:
-		return "CheckReq"
-	case CheckRes:
-		return "CheckRes"
-	case Confirmation:
-		return "Confirmation"
-	}
+	return MessageStringMap[B]
+}
 
-	return "<unfound>"
+// Ugly ...
+func Ugly(S string) byte {
+	return MessageByteMap[S]
 }

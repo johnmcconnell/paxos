@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 )
 
 // Paxos Payloads
@@ -16,7 +15,19 @@ const (
 	Yes
 	No
 	MessageSize = 16
-	Mask        = 0xFF
+)
+
+// Pretty Mappings ...
+var (
+	PayloadStringMap = map[uint32]string{
+		OK:       "OK",
+		NotOK:    "NotOK",
+		Elected:  "Elected",
+		Election: "Election",
+		Yes:      "Yes",
+		No:       "No",
+	}
+	PayloadUintMap map[string]uint32
 )
 
 // Message ...
@@ -27,18 +38,17 @@ type Message struct {
 	Round   uint32
 }
 
+func init() {
+	PayloadUintMap = make(map[string]uint32)
+
+	for k, v := range PayloadStringMap {
+		PayloadUintMap[v] = k
+	}
+}
+
 // String ...
 func (m Message) String() string {
-	S := ""
-
-	switch m.Payload {
-	case OK:
-		S = "OK"
-	case NotOK:
-		S = "NotOK"
-	case Elected:
-		S = "Elected"
-	}
+	S := PayloadStringMap[m.Payload]
 
 	return fmt.Sprintf(
 		"URL[%v] Status[%v] Round[%v]",
@@ -52,16 +62,7 @@ func (m Message) String() string {
 func BuildMessageS(s, h, p, i string) (Message, error) {
 	Zero := Message{}
 
-	var S uint32
-
-	switch s {
-	case "OK":
-		S = OK
-	case "NotOK":
-		S = NotOK
-	case "Elected":
-		S = Elected
-	}
+	S := PayloadUintMap[s]
 
 	I, err := strconv.ParseUint(i, 10, 32)
 
@@ -69,38 +70,17 @@ func BuildMessageS(s, h, p, i string) (Message, error) {
 		return Zero, err
 	}
 
-	URL := h + ":" + p
-
-	Addr, err := net.ResolveUDPAddr(
-		"udp",
-		URL,
-	)
-
-	if err != nil {
-		return Zero, err
-	}
-
-	return BuildMessage(S, Addr, uint32(I)), nil
+	return BuildMessage2(S, h, p, uint32(I))
 }
 
 // BuildMessage ...
 func BuildMessage(s uint32, addr *net.UDPAddr, i uint32) Message {
-	IPv4 := addr.IP.To4()
-
-	var IP uint32
-
-	IP += uint32(IPv4[0])
-	IP = IP << 8
-	IP += uint32(IPv4[1])
-	IP = IP << 8
-	IP += uint32(IPv4[2])
-	IP = IP << 8
-	IP += uint32(IPv4[3])
+	IP, Port := AddrToUint32s(addr)
 
 	m := Message{
 		Payload: s,
 		IP:      IP,
-		Port:    uint32(addr.Port),
+		Port:    Port,
 		Round:   i,
 	}
 
@@ -111,48 +91,20 @@ func BuildMessage(s uint32, addr *net.UDPAddr, i uint32) Message {
 func BuildMessage2(s uint32, host, port string, i uint32) (Message, error) {
 	Zero := Message{}
 
-	Port, err := strconv.ParseUint(port, 10, 32)
+	ID, err := AddrSToUint64(
+		host + ":" + port,
+	)
 
 	if err != nil {
 		return Zero, err
 	}
 
-	Subs := strings.Split(host, ".")
-	if len(Subs) != 4 {
-		return Zero, fmt.Errorf(
-			"Invalid length host[%v]",
-			host,
-		)
-	}
-
-	Part, err := strconv.Atoi(Subs[0])
-	if err != nil {
-		return Zero, err
-	}
-	IP := uint32(Part) << 24
-
-	Part, err = strconv.Atoi(Subs[1])
-	if err != nil {
-		return Zero, err
-	}
-	IP += uint32(Part) << 16
-
-	Part, err = strconv.Atoi(Subs[2])
-	if err != nil {
-		return Zero, err
-	}
-	IP += uint32(Part) << 8
-
-	Part, err = strconv.Atoi(Subs[3])
-	if err != nil {
-		return Zero, err
-	}
-	IP += uint32(Part)
+	IP, Port := Uint64ToUint32s(ID)
 
 	m := Message{
 		Payload: s,
 		IP:      IP,
-		Port:    uint32(Port),
+		Port:    Port,
 		Round:   i,
 	}
 
@@ -170,41 +122,23 @@ func (m Message) URL() string {
 
 // PortS ...
 func (m Message) PortS() string {
-	return fmt.Sprintf(
-		"%v",
-		m.Port,
-	)
+	return Uint32ToS(m.Port)
 }
 
 // ID ...
 func (m Message) ID() uint64 {
-	ID := uint64(m.IP) << 32
-	ID += uint64(m.Port)
-
-	return ID
+	return Uint32sToUint64(m.IP, m.Port)
 }
 
 // IPv4B ....
 func (m Message) IPv4B() (byte, byte, byte, byte) {
-	B1 := byte(m.IP >> 24)
-	B2 := byte((m.IP >> 16) & Mask)
-	B3 := byte((m.IP >> 8) & Mask)
-	B4 := byte(m.IP & Mask)
-
-	return B1, B2, B3, B4
+	return Uint32ToBytes(m.IP)
 }
 
 // IPv4S ....
 func (m Message) IPv4S() string {
 	B1, B2, B3, B4 := m.IPv4B()
-
-	return fmt.Sprintf(
-		"%v.%v.%v.%v",
-		B1,
-		B2,
-		B3,
-		B4,
-	)
+	return BytesToIPS(B1, B2, B3, B4)
 }
 
 // UDPAddr ...
@@ -235,21 +169,6 @@ func EncodeMessage(m Message) []byte {
 	return *EP
 }
 
-// EncodeUint ...
-func EncodeUint(B *[]byte, V uint32) {
-	var I uint32
-
-	for I < 4 {
-		Shift := (I * 8)
-		Part := (V >> Shift)
-
-		E := byte(Part & Mask)
-		(*B) = append(*B, E)
-
-		I++
-	}
-}
-
 // DecodeMessage ...
 func DecodeMessage(BS []byte) Message {
 	if len(BS) < MessageSize {
@@ -269,18 +188,4 @@ func DecodeMessage(BS []byte) Message {
 	DecodeUint(BS[12:16], &M.Round)
 
 	return M
-}
-
-// DecodeUint ...
-func DecodeUint(B []byte, V *uint32) {
-	var I uint32
-
-	for I < 4 {
-		Shift := (I * 8)
-		Part := uint32(B[I])
-
-		(*V) |= uint32(Part << Shift)
-
-		I++
-	}
 }
